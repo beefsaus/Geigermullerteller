@@ -1,6 +1,9 @@
 Simple Geiger-Mullercounter based on RadiationD-v1.1 CAJOE board and LILYGO TTGO T4 (ESP32 based).
+
 Displays a sliding average (60s) counts per minute
+
 Displays current counts per second
+
 Displays total counted counts
 
 

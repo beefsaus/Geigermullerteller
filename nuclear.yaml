@@ -1,5 +1,5 @@
 esphome:
-  name: nuclear
+  name: Geigerteller
 
 esp32:
   board: esp32dev
@@ -12,7 +12,7 @@ logger:
 # Enable Home Assistant API
 api:
   encryption:
-    key: "MpKke9/YDOnrgDYMoafoQxPlNhZxCkVhAYbbZdhT2XA="
+    key: !secret encryptiongeigerteller
 
 ota:
   password: "44f6ac6b430e766aa14c844fbd912d6b"
@@ -28,56 +28,118 @@ wifi:
 
 captive_portal:
 
+deep_sleep:
+  run_duration: 5min
+  wakeup_pin:
+    number: 39
+    inverted: true
+  wakeup_pin_mode: INVERT_WAKEUP
+
+debug:
+  update_interval: 10s
+  
 sensor:
   - platform: pulse_counter
-    pin: 19
-    unit_of_measurement: "CPM"
-    name: "Ionizing Radiation Counts Per Minute"
-    id: counter_cpm
+    pin: 34
+    unit_of_measurement: "CPS"
+    name: "Ionizing Radiation Counts Per Second"
+    id: counter_cps
+    update_interval: 1s
+    filters:
+      - multiply: 0.0166666 
+    total:
+      id: counter_total
     on_value:
       - sensor.template.publish:
-          id: counter_uSv_h
-          state: !lambda "return x / 153.8;"
-      # https://github.com/cdjq/DFRobot_Geiger
+          id: counter_cpm
+          state: !lambda "return x * 60;"
+      - sensor.template.publish:
+          id: counter_cpm_average
+          state: !lambda "return x * 60;"
 
   - platform: template
-    name: "Ionizing Radiation Power"
-    id: "counter_uSv_h"
-    unit_of_measurement: "µSv/h"
-    icon: mdi:radioactive
-    accuracy_decimals: 5
+    name: "Ionizing Radiation Counts Per Minute"
+    id: "counter_cpm"
+    unit_of_measurement: "CPM" 
+
+  - platform: template
+    name: "Average Ionizing Radiation Counts Per Minute"
+    id: "counter_cpm_average"
+    unit_of_measurement: "CPM"
+    filters:
+      - sliding_window_moving_average:
+          window_size: 60
+          send_every: 5
+  - platform: template
+    name: "Battery Percentage"
+    id: "battery_percentage"
+    unit_of_measurement: "%"
+    update_interval: 60s
+    lambda: |-
+      return ((id(battery_level).state-3) /1.2 * 100.00);
+    
+  - platform: adc
+    pin: 35
+    id: battery_level
+    update_interval: 60s
+    attenuation: auto
+    filters:
+      - multiply: 2
+  - platform: uptime
+    name: Uptime Sensor
+    id: uptime_esp
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      name: IP-adress
+      id: logip
+    ssid:
+      name: ESP Connected SSID
+      id: logssid
+    mac_address:
+      name: ESP Mac Wifi Address
+      id: logmac
+  
+  - platform: debug
+    device:
+      name: "Device Info"
+      id: logdebug
 
 binary_sensor:
   - platform: gpio
     name: "Page 1"
     pin:
-      number: 38
+      number: 37
     on_press:
       then:
-        - display.page.show: page1
+        - display.page.show_next: my_display
 
   - platform: gpio
     name: "Page 2"
     pin:
-      number: 37
+      number: 38
     on_press:
       then:
-        - display.page.show: page2
+        - display.page.show_previous: my_display
 
   - platform: gpio
-    name: "Page 3"
+    name: "Deep sleep button"
     pin:
       number: 39
     on_press:
       then:
-        - display.page.show: page3
-
+        - deep_sleep.enter
 font:
   # gfonts://family[@weight]
   - file: "gfonts://Roboto"
+    id: roboto10
+    size: 10
+  - file: "gfonts://Roboto"
     id: roboto25
     size: 25
-    glyphs: ["μ", "S", "v", "/", "h", "C", "M", "P"]
+  - file: "gfonts://Roboto"
+    id: roboto30
+    size: 30
   - file: "gfonts://Roboto"
     id: roboto36
     size: 36
@@ -93,6 +155,7 @@ spi:
 display:
   - platform: ili9341
     model: TFT 2.4
+    id: my_display
     cs_pin: 27
     dc_pin: 32
     led_pin: 4 ### see note below ###
@@ -101,33 +164,45 @@ display:
     pages:
       - id: page1
         lambda: |-
-          id(my_animation).next_frame();
-          it.image(45, 10, id(my_animation));
-          it.print(115, 10, id(roboto40), my_yellow, "Radiation");
-          it.printf(5, 80, id(roboto36), "%.3f", id(counter_uSv_h).state);
-          it.print(100, 140, id(roboto25), TextAlign::BASELINE_RIGHT, "μSv/h");
-          it.printf(15, 160, id(roboto36), "%03.0f", id(counter_cpm).state);
-          it.print(90, 220, id(roboto25), TextAlign::BASELINE_RIGHT, "CPM");
-          it.graph(115, 70, id(uSv_Hour_graph), my_light_blue);
-          it.graph(115, 155, id(cpm_graph), my_yellow);
+          it.image(5, 0, id(my_animation));
+          it.print(50, 0, id(roboto30), my_yellow, "Geiger-Mullerteller");
+          it.printf(5, 50, id(roboto36), "%03.0f", id(counter_cpm_average).state);
+          it.print(7, 83, id(roboto25), my_light_blue, "CPM");
+          it.printf(5, 150, id(roboto36), "%03.0f", id(counter_cps).state);
+          it.print(8, 183, id(roboto25), red, "CPS");
+          it.graph(80, 40, id(cpm_graph), my_light_blue);
+          it.print(80,120, id(roboto10), my_light_blue, "0               1                 2                 3    (tijd in minuten) " );
+          it.graph(80, 135, id(cps_graph), red);
+          it.print(80,215, id(roboto10), red, "0           10           20           30        (tijd in seconden) " );
       - id: page2
         lambda: |-
-          it.print(45, 10, id(roboto40), my_yellow, "Sievert Scale");
-          it.print(130, 50, id(roboto25), "μSv/h");
-          it.print(20, 90, id(roboto36), "0.15 : Normal");
-          it.print(20, 140, id(roboto36), "0.60 : Unsafe");
-          it.print(20, 190, id(roboto36), "1.50 : Dangerous");
+          it.image(5, 0, id(my_animation));
+          it.print(50, 0, id(roboto30), my_yellow, "Data Overzicht");
+          it.printf(5, 50, id(roboto36), "%03.0f", id(counter_cps).state);
+          it.print(7, 83, id(roboto25), my_light_blue, "CPS");
+          it.printf(85, 50, id(roboto36), "%03.0f", id(counter_cpm_average).state);
+          it.print(87, 83, id(roboto25), red, "CPM");
+          it.printf(165, 50, id(roboto36), "%0.0f", id(battery_percentage).state); 
+          it.print(167, 83, id(roboto25), my_purple, "Accu");
+          it.printf(245, 50, id(roboto36), "%01.2f", id(battery_level).state ); 
+          it.print(247, 83, id(roboto25), my_yellow, "Volt");
+          it.printf(5, 153, id(roboto36), "%05.0f", id(counter_total).state);
+          it.print(18, 185, id(roboto25), my_green, "Totaal");
+          it.graph(120, 135, id(total_graph), my_green);
+          it.print(120,215, id(roboto10), my_green, "0               1                 2                 3  (tijd in minuten)" );
       - id: page3
         lambda: |-
-          it.print(60, 10, id(roboto40), my_light_blue, "CPM Scale");
-          it.print(15, 80, id(roboto36), "7-30 : Normal");
-          it.print(15, 130, id(roboto36), "150 : Safe");
-          it.print(15, 180, id(roboto36), "+150 : Dangerous");
+          it.print(55, 0, id(roboto30), my_yellow, "Github QR-code");
+          it.qr_code(80, 40, id(github), Color(255,255,255), 4);
+qr_code:
+  - id: github
+    value: https://github.com/beefsaus/Geigermullerteller
+    ecc: high
 
 animation:
-  - file: "radio.gif"
+  - file: "Radioactive.png"
     id: my_animation
-    resize: 50x50
+    resize: 35x35
     type: RGB24
 
 color:
@@ -137,20 +212,54 @@ color:
     blue: 100%
     white: 0%
 
+  - id: red
+    red: 100%
+    green: 0%
+    blue: 0%
+
   - id: my_yellow
     red: 100%
     green: 100%
     blue: 0%
+    
+  - id: my_green
+    red: 0%
+    green: 100%
+    blue: 0%
+  - id: my_purple
+    red: 100%
+    green: 0%
+    blue: 100%
 
 graph:
   # Show bare-minimum auto-ranged graph
-  - id: uSv_Hour_graph
-    sensor: counter_uSv_h
-    duration: 1h
-    width: 200
+  - id: cps_graph
+    duration: 1min
+    x_grid: 10s
+    y_grid: 10
+    width: 200.0
     height: 80
+    traces:
+      - sensor: counter_cps
+        line_type: SOLID
+        line_thickness: 2
   - id: cpm_graph
-    sensor: counter_cpm
-    duration: 1h
+    duration: 5min
+    x_grid: 60s
+    y_grid: 10
     width: 200
     height: 80
+    traces:
+      - sensor: counter_cpm_average
+        line_type: SOLID
+        line_thickness: 2
+  - id: total_graph
+    duration: 5min
+    x_grid: 1min
+    y_grid: 10
+    width: 200
+    height: 80
+    traces:
+      - sensor: counter_total
+        line_type: SOLID
+        line_thickness: 2

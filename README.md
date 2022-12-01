@@ -8,14 +8,14 @@ Displays total counted counts
 
 
 Switching pages:
-The middle button is used to switch pages. Internally this is GPIO 37.
+The bottem button is used to switch pages. Internally this is GPIO 37.
 
 Battery voltage:
 Measured using the internal ADC of the ESP32 which is wired to GPIO35 internally. 
 
 
 Deepsleep:
-Implemented deepsleep on GPIO 39 (top button). Wake-up is only possible during 32 seconds after entering deepsleep.  This is limited by the onboard IP5306 which removes power after 32s of low load  (> 45mA) in deepsleep. Consider soldering RST pin to a front pushbutton to restore power. I used GPIO 38. 
+Implemented deepsleep on GPIO 38 (middle button). Wake-up is only possible during 32 seconds after entering deepsleep.  This is limited by the onboard IP5306 which removes power after 32s of low load  (> 45mA) in deepsleep. Consider soldering RST pin to a front pushbutton to restore power. I used GPIO 39. This is the top button. 
 
 
 

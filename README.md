@@ -8,7 +8,7 @@ Displays total counted counts
 
 
 Switching pages:
-The bottem button is used to switch pages. Internally this is GPIO 37.
+The bottom button is used to switch pages. Internally this is GPIO 37.
 
 Battery voltage:
 Measured using the internal ADC of the ESP32 which is wired to GPIO35 internally. 
